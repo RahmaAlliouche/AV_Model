@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Age, Gender, and Skin Tone Prediction</title>
+</head>
+<body>
+    <h1>Age, Gender, and Skin Tone Prediction</h1>
+    
+    <!-- Form to upload the image -->
+    <form method="POST" enctype="multipart/form-data">
+        <input type="file" name="file" accept="image/*">
+        <button type="submit">Upload</button>
+    </form>
+
+    {% if filename %}
+        <h3>Uploaded Image</h3>
+        <img src="{{ url_for('static', filename='uploads/' + filename) }}" alt="Uploaded Image" style="width: 300px; height: auto;">
+        <h3>Predictions:</h3>
+        <p>Age: {{ age }}</p>
+        <p>Gender: {{ gender }}</p>
+        <p>Skin Tone: {{ skin }}</p>
+    {% endif %}
+</body>
+</html>
