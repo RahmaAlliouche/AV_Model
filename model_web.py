@@ -1,108 +1,67 @@
 import numpy as np
 import cv2
 import tensorflow as tf
-from tensorflow.keras.layers import Input, Conv2D, MaxPooling2D, Flatten, Dense
+from tensorflow.keras.applications import MobileNetV2
+from tensorflow.keras.layers import Dense, Flatten, Dropout
 from tensorflow.keras.models import Model
 from tensorflow.keras.utils import to_categorical
 
-# Build the new model
-input_layer = Input(shape=(224, 224, 3))
+# Load a pretrained MobileNetV2 model
+base_model = MobileNetV2(weights="imagenet", include_top=False, input_shape=(224, 224, 3))
 
-# Shared layers
-x = Conv2D(32, (3, 3), activation='relu')(input_layer)
-x = MaxPooling2D((2, 2))(x)
-x = Conv2D(64, (3, 3), activation='relu')(x)
-x = MaxPooling2D((2, 2))(x)
-x = Flatten()(x)
+# Freeze the base model's layers
+base_model.trainable = False
 
-# Output layers
-age_output = Dense(4, activation='softmax', name='age_output')(x)  # 4 age groups
-gender_output = Dense(1, activation='sigmoid', name='gender_output')(x)  # Binary gender
-skin_output = Dense(2, activation='softmax', name='skin_output')(x)  # 2 skin tones
+# Add custom layers for age, gender, and skin tone detection
+x = Flatten()(base_model.output)
+x = Dropout(0.5)(x)  # Add dropout for regularization
 
-# Define the model
-model = Model(inputs=input_layer, outputs=[age_output, gender_output, skin_output])
+# Age prediction: Use 10 classes for finer-grained age predictions (e.g., 0-9, 10-19, ...)
+age_output = Dense(10, activation="softmax", name="age_output")(x)
+
+# Gender prediction: Binary classification (0: Male, 1: Female)
+gender_output = Dense(1, activation="sigmoid", name="gender_output")(x)
+
+# Skin tone prediction: Assume 3 classes (e.g., Light, Medium, Dark)
+skin_output = Dense(3, activation="softmax", name="skin_output")(x)
+
+# Define the updated model
+model = Model(inputs=base_model.input, outputs=[age_output, gender_output, skin_output])
 
 # Compile the model
 model.compile(
-    optimizer='adam',
+    optimizer="adam",
     loss={
-        'age_output': 'categorical_crossentropy',
-        'gender_output': 'binary_crossentropy',
-        'skin_output': 'categorical_crossentropy'
+        "age_output": "categorical_crossentropy",
+        "gender_output": "binary_crossentropy",
+        "skin_output": "categorical_crossentropy",
     },
     metrics={
-        'age_output': 'accuracy',
-        'gender_output': 'accuracy',
-        'skin_output': 'accuracy'
-    }
+        "age_output": "accuracy",
+        "gender_output": "accuracy",
+        "skin_output": "accuracy",
+    },
 )
 
-print("Model built and compiled successfully!")
+print("Updated model built successfully!")
 
-# Simulate training data for demonstration purposes
-num_samples = 100
-train_images = np.random.rand(num_samples, 224, 224, 3)
-train_ages = to_categorical(np.random.randint(0, 4, size=(num_samples,)), num_classes=4)
-train_genders = np.random.randint(0, 2, size=(num_samples,)).astype(np.float32)
-train_skins = to_categorical(np.random.randint(0, 2, size=(num_samples,)), num_classes=2)
+# Simulate training data for demonstration (replace with your real dataset)
+num_samples = 200
+train_images = np.random.rand(num_samples, 224, 224, 3)  # Random images
+train_ages = to_categorical(np.random.randint(0, 10, size=(num_samples,)), num_classes=10)  # 10 age groups
+train_genders = np.random.randint(0, 2, size=(num_samples,)).astype(np.float32)  # Binary gender
+train_skins = to_categorical(np.random.randint(0, 3, size=(num_samples,)), num_classes=3)  # 3 skin tones
 
-# Train the model (replace with your real dataset)
+# Train the model
 print("Training the model...")
 history = model.fit(
     train_images,
-    {'age_output': train_ages, 'gender_output': train_genders, 'skin_output': train_skins},
-    epochs=10,
-    batch_size=8
+    {"age_output": train_ages, "gender_output": train_genders, "skin_output": train_skins},
+    epochs=5,
+    batch_size=16,
 )
 
-# Use the model in real-time prediction from webcam
-age_labels = ['Baby', 'Child', 'Adult', 'Senior']
-gender_labels = ['Male', 'Female']
-skin_labels = ['Light Skin', 'Dark Skin']
-
-# Function to preprocess frames
-def preprocess_frame(frame):
-    resized_frame = cv2.resize(frame, (224, 224))  # Resize to match model input
-    normalized_frame = resized_frame / 255.0       # Normalize pixel values
-    return np.expand_dims(normalized_frame, axis=0)
-
-# Open a connection to the webcam
-cap = cv2.VideoCapture(0)
-
-if not cap.isOpened():
-    print("Error: Could not open webcam.")
-    exit()
-
-print("Press 'q' to exit.")
-
-while True:
-    ret, frame = cap.read()
-    
-    if not ret:
-        print("Failed to grab frame.")
-        break
-
-    # Preprocess the frame for the model
-    input_frame = preprocess_frame(frame)
-
-    # Predict using the model
-    predictions = model.predict(input_frame)
-    age_pred = np.argmax(predictions[0])  # Age group prediction
-    gender_pred = int(predictions[1][0] > 0.5)  # Gender prediction
-    skin_pred = np.argmax(predictions[2])  # Skin tone prediction
-
-    # Overlay predictions on the frame
-    label = f"Age: {age_labels[age_pred]}, Gender: {gender_labels[gender_pred]}, Skin: {skin_labels[skin_pred]}"
-    cv2.putText(frame, label, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-
-    # Display the frame
-    cv2.imshow('Real-Time Prediction', frame)
-
-    # Break the loop on 'q' key press
-    if cv2.waitKey(1) & 0xFF == ord('q'):
-        break
-
-# Release resources
-cap.release()
-cv2.destroyAllWindows()
+# Save the trained model to disk
+model_path = "trained_model.h5"
+model.save(model_path)
+print(f"Model saved to {model_path}!")
